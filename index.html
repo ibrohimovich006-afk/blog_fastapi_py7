@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blog App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f5f7fb;
+      color: #1f2937;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+    .subtitle {
+      color: #6b7280;
+      margin-bottom: 1.5rem;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 1rem;
+      box-shadow: 0 2px 10px rgba(0,0,0,.04);
+    }
+    .create-form {
+      display: grid;
+      gap: .8rem;
+      margin-bottom: 1.5rem;
+    }
+    input, textarea {
+      width: 100%;
+      padding: .75rem .85rem;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font: inherit;
+      outline: none;
+    }
+    textarea {
+      min-height: 140px;
+      resize: vertical;
+    }
+    input:focus, textarea:focus {
+      border-color: #4f46e5;
+    }
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: .65rem 1rem;
+      font: inherit;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #4f46e5;
+      color: white;
+      font-weight: 600;
+    }
+    .btn-primary:hover { opacity: .94; }
+    .message {
+      margin-bottom: 1rem;
+      padding: .8rem 1rem;
+      border-radius: 10px;
+      display: none;
+    }
+    .message.show { display: block; }
+    .message.error { background: #fee2e2; color: #991b1b; }
+    .message.success { background: #dcfce7; color: #166534; }
+    .list {
+      display: grid;
+      gap: 1rem;
+    }
+    .post-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 1rem;
+    }
+    .post-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: .35rem;
+    }
+    .post-meta {
+      color: #6b7280;
+      font-size: .9rem;
+      margin-bottom: .75rem;
+    }
+    .post-content {
+      line-height: 1.6;
+      white-space: pre-wrap;
+      color: #374151;
+    }
+    .actions {
+      display: flex;
+      gap: .5rem;
+      justify-content: flex-end;
+      margin-top: 1rem;
+    }
+    .btn-edit { background: #e5e7eb; }
+    .btn-delete { background: #fee2e2; color: #991b1b; }
+    .btn-save { background: #dcfce7; color: #166534; }
+    .btn-cancel { background: #f3f4f6; }
+    .edit-form {
+      display: none;
+      gap: .75rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e5e7eb;
+    }
+    .loading, .empty {
+      text-align: center;
+      color: #6b7280;
+      padding: 2rem 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Blog App</h1>
+    <p class="subtitle">FastAPI CRUD: create, list, read, update, delete posts.</p>
+
+    <div id="message" class="message"></div>
+
+    <div class="card create-form">
+      <input id="title" type="text" placeholder="Post title" />
+      <input id="author" type="text" placeholder="Author" />
+      <textarea id="content" placeholder="Post content"></textarea>
+      <button class="btn-primary" onclick="createPost()">Add Post</button>
+    </div>
+
+    <div id="posts"><div class="loading">Loading posts...</div></div>
+  </div>
+
+  <script>
+    const API = 'http://127.0.0.1:8000/api/posts';
+
+    function showMessage(text, type = 'error') {
+      const el = document.getElementById('message');
+      el.textContent = text;
+      el.className = `message show ${type}`;
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => {
+        el.className = 'message';
+      }, 3000);
+    }
+
+    async function apiFetch(url, options = {}) {
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `${res.status} error`);
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    }
+
+    function renderPosts(posts) {
+      const box = document.getElementById('posts');
+      if (!posts.length) {
+        box.innerHTML = '<div class="empty">No posts yet.</div>';
+        return;
+      }
+
+      box.innerHTML = `<div class="list">${posts.map(post => `
+        <div class="post-card" data-id="${post.id}">
+          <div class="post-title">${escapeHtml(post.title)}</div>
+          <div class="post-meta">By ${escapeHtml(post.author)} · ID: ${post.id}</div>
+          <div class="post-content">${escapeHtml(post.content)}</div>
+          <div class="actions">
+            <button class="btn-edit" onclick="openEdit(${post.id})">Edit</button>
+            <button class="btn-delete" onclick="deletePost(${post.id})">Delete</button>
+          </div>
+          <div class="edit-form" id="edit-${post.id}">
+            <input id="edit-title-${post.id}" value="${escapeAttr(post.title)}" />
+            <input id="edit-author-${post.id}" value="${escapeAttr(post.author)}" />
+            <textarea id="edit-content-${post.id}">${escapeHtml(post.content)}</textarea>
+            <div class="actions">
+              <button class="btn-cancel" onclick="closeEdit(${post.id})">Cancel</button>
+              <button class="btn-save" onclick="saveEdit(${post.id})">Save</button>
+            </div>
+          </div>
+        </div>
+      `).join('')}</div>`;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function escapeAttr(str) {
+      return String(str).replace(/"/g, '&quot;');
+    }
+
+    async function loadPosts() {
+      try {
+        const posts = await apiFetch(`${API}/`);
+        renderPosts(posts);
+      } catch (err) {
+        document.getElementById('posts').innerHTML = '<div class="empty">Failed to load posts.</div>';
+        showMessage(err.message);
+      }
+    }
+
+    async function createPost() {
+      const title = document.getElementById('title').value.trim();
+      const author = document.getElementById('author').value.trim();
+      const content = document.getElementById('content').value.trim();
+
+      if (!title || !author || !content) {
+        showMessage('Barcha maydonlarni to\'ldiring');
+        return;
+      }
+
+      try {
+        await apiFetch(`${API}/`, {
+          method: 'POST',
+          body: JSON.stringify({ title, author, content })
+        });
+        document.getElementById('title').value = '';
+        document.getElementById('author').value = '';
+        document.getElementById('content').value = '';
+        showMessage('Post qo\'shildi', 'success');
+        loadPosts();
+      } catch (err) {
+        showMessage(err.message);
+      }
+    }
+
+    function openEdit(id) {
+      document.querySelectorAll('.edit-form').forEach(el => el.style.display = 'none');
+      document.getElementById(`edit-${id}`).style.display = 'grid';
+    }
+
+    function closeEdit(id) {
+      document.getElementById(`edit-${id}`).style.display = 'none';
+    }
+
+    async function saveEdit(id) {
+      const title = document.getElementById(`edit-title-${id}`).value.trim();
+      const author = document.getElementById(`edit-author-${id}`).value.trim();
+      const content = document.getElementById(`edit-content-${id}`).value.trim();
+
+      if (!title || !author || !content) {
+        showMessage('Barcha maydonlarni to\'ldiring');
+        return;
+      }
+
+      try {
+        await apiFetch(`${API}/${id}/`, {
+          method: 'PUT',
+          body: JSON.stringify({ title, author, content })
+        });
+        showMessage('Post yangilandi', 'success');
+        loadPosts();
+      } catch (err) {
+        showMessage(err.message);
+      }
+    }
+
+    async function deletePost(id) {
+      if (!confirm('Shu postni o\'chirasizmi?')) return;
+      try {
+        await apiFetch(`${API}/${id}/`, { method: 'DELETE' });
+        showMessage('Post o\'chirildi', 'success');
+        loadPosts();
+      } catch (err) {
+        showMessage(err.message);
+      }
+    }
+
+    loadPosts();
+  </script>
+</body>
+</html>
