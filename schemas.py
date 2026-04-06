@@ -1,26 +1,35 @@
-from datetime import datetime
-
-from pydantic import BaseModel, Field
-
-
-class PostBase(BaseModel):
-    title: str = Field(..., min_length=1, max_length=150)
-    content: str = Field(..., min_length=1)
-    author: str = Field(..., min_length=1, max_length=100)
+from pydantic import BaseModel
+class UserCreate(BaseModel):
+    username: str
+    email: str
 
 
-class PostCreate(PostBase):
-    pass
-
-
-class PostUpdate(PostBase):
-    pass
-
-
-class PostOut(PostBase):
+class UserOut(BaseModel):
     id: int
-    created_at: datetime
+    username: str
+    email: str
 
-    model_config = {
-        'from_attributes': True,
-    }
+    class Config:
+        from_attributes = True
+
+
+class PostCreate(BaseModel):
+    title: str
+    content: str
+    user_id: int
+
+
+class PostUpdate(BaseModel):
+    title: str
+    content: str
+    user_id: int
+
+
+class PostOut(BaseModel):
+    id: int
+    title: str
+    content: str
+    user_id: int
+
+    class Config:
+        from_attributes = True
